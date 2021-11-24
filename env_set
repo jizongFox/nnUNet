@@ -1,0 +1,5 @@
+#!/bin/bash
+folder="/home/jizong/Workspace/nnUNet/data"
+export nnUNet_raw_data_base="${folder}/nnUNet_raw"
+export nnUNet_preprocessed="${folder}/nnUNet_preprocessed"
+export RESULTS_FOLDER="${folder}/nnUNet_trained_models"

@@ -13,29 +13,28 @@
 #    limitations under the License.
 
 
+import sys
 from _warnings import warn
+from abc import abstractmethod
+from collections import OrderedDict
+from datetime import datetime
+from time import time, sleep
 from typing import Tuple
 
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
 from batchgenerators.utilities.file_and_folder_operations import *
-from nnunet.network_architecture.neural_network import SegmentationNetwork
 from sklearn.model_selection import KFold
 from torch import nn
 from torch.cuda.amp import GradScaler, autocast
-from torch.optim.lr_scheduler import _LRScheduler
-
-matplotlib.use("agg")
-from time import time, sleep
-import torch
-import numpy as np
 from torch.optim import lr_scheduler
-import matplotlib.pyplot as plt
-import sys
-from collections import OrderedDict
-import torch.backends.cudnn as cudnn
-from abc import abstractmethod
-from datetime import datetime
+from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import trange
+
+from nnunet.network_architecture.neural_network import SegmentationNetwork
 from nnunet.utilities.to_torch import maybe_to_torch, to_cuda
 
 
@@ -280,7 +279,8 @@ class NetworkTrainer(object):
             'lr_scheduler_state_dict': lr_sched_state_dct,
             'plot_stuff': (self.all_tr_losses, self.all_val_losses, self.all_val_losses_tr_mode,
                            self.all_val_eval_metrics),
-            'best_stuff' : (self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA)}
+            'best_stuff': (
+            self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA)}
         if self.amp_grad_scaler is not None:
             save_this['amp_grad_scaler'] = self.amp_grad_scaler.state_dict()
 
@@ -381,7 +381,8 @@ class NetworkTrainer(object):
 
         # load best loss (if present)
         if 'best_stuff' in checkpoint.keys():
-            self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA = checkpoint[
+            self.best_epoch_based_on_MA_tr_loss, self.best_MA_tr_loss_for_patience, self.best_val_eval_criterion_MA = \
+            checkpoint[
                 'best_stuff']
 
         # after the training is done, the epoch is incremented one more time in my old code. This results in
@@ -413,7 +414,8 @@ class NetworkTrainer(object):
 
     def run_training(self):
         if not torch.cuda.is_available():
-            self.print_to_log_file("WARNING!!! You are attempting to run training on a CPU (torch.cuda.is_available() is False). This can be VERY slow!")
+            self.print_to_log_file(
+                "WARNING!!! You are attempting to run training on a CPU (torch.cuda.is_available() is False). This can be VERY slow!")
 
         _ = self.tr_gen.next()
         _ = self.val_gen.next()
@@ -423,7 +425,7 @@ class NetworkTrainer(object):
 
         self._maybe_init_amp()
 
-        maybe_mkdir_p(self.output_folder)        
+        maybe_mkdir_p(self.output_folder)
         self.plot_network_architecture()
 
         if cudnn.benchmark and cudnn.deterministic:
@@ -445,7 +447,7 @@ class NetworkTrainer(object):
             if self.use_progress_bar:
                 with trange(self.num_batches_per_epoch) as tbar:
                     for b in tbar:
-                        tbar.set_description("Epoch {}/{}".format(self.epoch+1, self.max_num_epochs))
+                        tbar.set_description("Epoch {}/{}".format(self.epoch + 1, self.max_num_epochs))
 
                         l = self.run_iteration(self.tr_gen, True)
 
@@ -568,12 +570,12 @@ class NetworkTrainer(object):
             # check if the current epoch is the best one according to moving average of validation criterion. If so
             # then save 'best' model
             # Do not use this for validation. This is intended for test set prediction only.
-            #self.print_to_log_file("current best_val_eval_criterion_MA is %.4f0" % self.best_val_eval_criterion_MA)
-            #self.print_to_log_file("current val_eval_criterion_MA is %.4f" % self.val_eval_criterion_MA)
+            # self.print_to_log_file("current best_val_eval_criterion_MA is %.4f0" % self.best_val_eval_criterion_MA)
+            # self.print_to_log_file("current val_eval_criterion_MA is %.4f" % self.val_eval_criterion_MA)
 
             if self.val_eval_criterion_MA > self.best_val_eval_criterion_MA:
                 self.best_val_eval_criterion_MA = self.val_eval_criterion_MA
-                #self.print_to_log_file("saving best epoch checkpoint...")
+                # self.print_to_log_file("saving best epoch checkpoint...")
                 if self.save_best_checkpoint: self.save_checkpoint(join(self.output_folder, "model_best.model"))
 
             # Now see if the moving average of the train loss has improved. If yes then reset patience, else
@@ -581,23 +583,23 @@ class NetworkTrainer(object):
             if self.train_loss_MA + self.train_loss_MA_eps < self.best_MA_tr_loss_for_patience:
                 self.best_MA_tr_loss_for_patience = self.train_loss_MA
                 self.best_epoch_based_on_MA_tr_loss = self.epoch
-                #self.print_to_log_file("New best epoch (train loss MA): %03.4f" % self.best_MA_tr_loss_for_patience)
+                # self.print_to_log_file("New best epoch (train loss MA): %03.4f" % self.best_MA_tr_loss_for_patience)
             else:
                 pass
-                #self.print_to_log_file("No improvement: current train MA %03.4f, best: %03.4f, eps is %03.4f" %
+                # self.print_to_log_file("No improvement: current train MA %03.4f, best: %03.4f, eps is %03.4f" %
                 #                       (self.train_loss_MA, self.best_MA_tr_loss_for_patience, self.train_loss_MA_eps))
 
             # if patience has reached its maximum then finish training (provided lr is low enough)
             if self.epoch - self.best_epoch_based_on_MA_tr_loss > self.patience:
                 if self.optimizer.param_groups[0]['lr'] > self.lr_threshold:
-                    #self.print_to_log_file("My patience ended, but I believe I need more time (lr > 1e-6)")
+                    # self.print_to_log_file("My patience ended, but I believe I need more time (lr > 1e-6)")
                     self.best_epoch_based_on_MA_tr_loss = self.epoch - self.patience // 2
                 else:
-                    #self.print_to_log_file("My patience ended")
+                    # self.print_to_log_file("My patience ended")
                     continue_training = False
             else:
                 pass
-                #self.print_to_log_file(
+                # self.print_to_log_file(
                 #    "Patience: %d/%d" % (self.epoch - self.best_epoch_based_on_MA_tr_loss, self.patience))
 
         return continue_training
@@ -635,7 +637,6 @@ class NetworkTrainer(object):
         if torch.cuda.is_available():
             data = to_cuda(data)
             target = to_cuda(target)
-
         self.optimizer.zero_grad()
 
         if self.fp16:

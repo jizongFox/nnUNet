@@ -17,7 +17,7 @@ import shutil
 from collections import OrderedDict
 from multiprocessing import Pool
 from time import sleep
-from typing import Tuple, List
+from typing import Tuple
 
 import matplotlib
 import numpy as np
@@ -485,7 +485,8 @@ class nnUNetTrainer(NetworkTrainer):
                                                          use_sliding_window: bool = True, step_size: float = 0.5,
                                                          use_gaussian: bool = True, pad_border_mode: str = 'constant',
                                                          pad_kwargs: dict = None, all_in_gpu: bool = False,
-                                                         verbose: bool = True, mixed_precision: bool = True) -> Tuple[np.ndarray, np.ndarray]:
+                                                         verbose: bool = True, mixed_precision: bool = True) -> Tuple[
+        np.ndarray, np.ndarray]:
         """
         :param data:
         :param do_mirroring:
@@ -680,29 +681,29 @@ class nnUNetTrainer(NetworkTrainer):
 
         self.network.train(current_mode)
 
+    @torch.no_grad()
     def run_online_evaluation(self, output, target):
-        with torch.no_grad():
-            num_classes = output.shape[1]
-            output_softmax = softmax_helper(output)
-            output_seg = output_softmax.argmax(1)
-            target = target[:, 0]
-            axes = tuple(range(1, len(target.shape)))
-            tp_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
-            fp_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
-            fn_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
-            for c in range(1, num_classes):
-                tp_hard[:, c - 1] = sum_tensor((output_seg == c).float() * (target == c).float(), axes=axes)
-                fp_hard[:, c - 1] = sum_tensor((output_seg == c).float() * (target != c).float(), axes=axes)
-                fn_hard[:, c - 1] = sum_tensor((output_seg != c).float() * (target == c).float(), axes=axes)
+        num_classes = output.shape[1]
+        output_softmax = softmax_helper(output)
+        output_seg = output_softmax.argmax(1)
+        target = target[:, 0]
+        axes = tuple(range(1, len(target.shape)))
+        tp_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
+        fp_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
+        fn_hard = torch.zeros((target.shape[0], num_classes - 1)).to(output_seg.device.index)
+        for c in range(1, num_classes):
+            tp_hard[:, c - 1] = sum_tensor((output_seg == c).float() * (target == c).float(), axes=axes)
+            fp_hard[:, c - 1] = sum_tensor((output_seg == c).float() * (target != c).float(), axes=axes)
+            fn_hard[:, c - 1] = sum_tensor((output_seg != c).float() * (target == c).float(), axes=axes)
 
-            tp_hard = tp_hard.sum(0, keepdim=False).detach().cpu().numpy()
-            fp_hard = fp_hard.sum(0, keepdim=False).detach().cpu().numpy()
-            fn_hard = fn_hard.sum(0, keepdim=False).detach().cpu().numpy()
+        tp_hard = tp_hard.sum(0, keepdim=False).detach().cpu().numpy()
+        fp_hard = fp_hard.sum(0, keepdim=False).detach().cpu().numpy()
+        fn_hard = fn_hard.sum(0, keepdim=False).detach().cpu().numpy()
 
-            self.online_eval_foreground_dc.append(list((2 * tp_hard) / (2 * tp_hard + fp_hard + fn_hard + 1e-8)))
-            self.online_eval_tp.append(list(tp_hard))
-            self.online_eval_fp.append(list(fp_hard))
-            self.online_eval_fn.append(list(fn_hard))
+        self.online_eval_foreground_dc.append(list((2 * tp_hard) / (2 * tp_hard + fp_hard + fn_hard + 1e-8)))
+        self.online_eval_tp.append(list(tp_hard))
+        self.online_eval_fp.append(list(fp_hard))
+        self.online_eval_fn.append(list(fn_hard))
 
     def finish_online_evaluation(self):
         self.online_eval_tp = np.sum(self.online_eval_tp, 0)
